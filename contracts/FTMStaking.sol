@@ -18,7 +18,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
  * @author Stader Labs
  * @notice Main point of interaction with Stader protocol's v1 liquid staking
  */
-contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
+contract FTMStakingV1_1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     // These constants have been taken from the SFC contract
     uint256 public constant DECIMAL_UNIT = 1e18;
     uint256 public constant UNLOCKED_REWARD_RATIO = (30 * DECIMAL_UNIT) / 100;
@@ -121,6 +121,15 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     mapping(uint256 => WithdrawalRequest) public allWithdrawalRequests;
 
+    // All storage above this comment belongs to the V1 contract
+
+    /**
+     * @dev A reference to the locker admin address
+     */
+    address public lockerAdmin;
+
+    // Events
+
     event LogValidatorPickerSet(address indexed owner, address validatorPicker);
     event LogEpochDurationSet(address indexed owner, uint256 duration);
     event LogWithdrawalDelaySet(address indexed owner, uint256 delay);
@@ -137,38 +146,15 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     event LogVaultHarvested(address indexed vault, uint256 maturedIndex);
     event LogVaultWithdrawn(address indexed vault);
 
+    // Events in v1_1
+
+    event LogTreasuryUpdated(address indexed owner, address newTreasury);
+    event LogProtocolFeeUpdated(address indexed owner, uint256 newFeeBIPS);
+    event LogLockerAdminUpdated(address indexed owner, address newAdmin);
+    event VaultDeleted(uint256 indexed vaultIndex, address indexed vaultAddress);
+
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() initializer {}
-
-    /**
-     * @notice Initializer
-     * @param _ftmx_ the address of the FTM token contract (is NOT modifiable)
-     * @param _sfc_ the address of the SFC contract (is NOT modifiable)
-     * @param maxVaultCount_ the maximum number of vaults to be created (is NOT modifiable)
-     * @param epochDuration_ the duration of a locking epoch (is modifiable)
-     * @param withdrawalDelay_ the delay between undelegation & withdrawal (is modifiable)
-     */
-    function initialize(
-        IERC20Burnable _ftmx_,
-        ISFC _sfc_,
-        uint256 maxVaultCount_,
-        uint256 epochDuration_,
-        uint256 withdrawalDelay_
-    ) public initializer {
-        __Ownable_init();
-        __UUPSUpgradeable_init();
-
-        FTMX = _ftmx_;
-        SFC = _sfc_;
-
-        maxVaultCount = maxVaultCount_;
-        epochDuration = epochDuration_;
-        withdrawalDelay = withdrawalDelay_;
-
-        treasury = msg.sender;
-        minDeposit = 0;
-        maxDeposit = 100 ether;
-    }
 
     /*******************************
      * Getter & helper functions   *
@@ -225,14 +211,14 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         for (uint256 i = 0; i < vaultCount; i = _uncheckedInc(i)) {
             address payable vault = _allVaults[i];
             if (vault != address(0)) {
-                total += Vault(vault).currentStakeValue();
+                total += _currentStakeValue(vault);
             }
         }
 
         uint256 maturedCount = _maturedVaults.length;
         for (uint256 i = 0; i < maturedCount; i = _uncheckedInc(i)) {
             address payable vault = _maturedVaults[i];
-            total += Vault(vault).currentStakeValue();
+            total += _currentStakeValue(vault);
         }
 
         return total;
@@ -261,6 +247,7 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         uint256 totalFTMx = FTMX.totalSupply();
 
         if (toIgnore) {
+            require(totalFTM >= ftmAmount, "ERR_TOTALFTM_IS_NOT_ENOUGH");
             totalFTM -= ftmAmount;
         }
 
@@ -358,11 +345,16 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
      * @param amount the amount to lock
      * IMPORTANT: the validator is picked by the validator picker contract
      */
-    function lock(uint256 amount) external onlyOwner {
+    function lock(uint256 amount) external {
+        require(msg.sender == lockerAdmin, "ERR_UNAUTHORIZED");
         require(_now() >= nextEligibleTimestamp, "ERR_WAIT_FOR_NEXT_EPOCH");
-        require(amount > 0 && amount <= getPoolBalance(), "ERR_INVALID_AMOUNT");
 
-        nextEligibleTimestamp += epochDuration;
+        uint256 poolBalance = getPoolBalance();
+        if (amount > poolBalance) {
+            amount = poolBalance;
+        }
+
+        nextEligibleTimestamp = _now() + epochDuration;
 
         (uint256 toValidatorID, uint256 lockupDuration) = validatorPicker.getNextValidatorInfo(amount);
 
@@ -406,6 +398,7 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
      */
     function updateVaultOwner(address payable vault, address newOwner) external onlyOwner {
         // Needs to support arbitrary input address to work with expired/matured vaults
+        require(newOwner != address(0), "ERR_INVALID_VALUE");
         Vault(vault).updateOwner(newOwner);
         emit LogVaultOwnerUpdated(msg.sender, vault, newOwner);
     }
@@ -453,6 +446,7 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function setTreasury(address newTreasury) external onlyOwner {
         require(newTreasury != address(0), "ERR_INVALID_VALUE");
         treasury = newTreasury;
+        emit LogTreasuryUpdated(msg.sender, newTreasury);
     }
 
     /**
@@ -462,6 +456,17 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function setProtocolFeeBIPS(uint256 newFeeBIPS) external onlyOwner {
         require(newFeeBIPS <= 10_000, "ERR_INVALID_VALUE");
         protocolFeeBIPS = newFeeBIPS;
+        emit LogProtocolFeeUpdated(msg.sender, newFeeBIPS);
+    }
+
+    /**
+     * @notice Update the locker admin address
+     * @param newLockerAdmin the new locker admin address
+     */
+    function setLockerAdmin(address newLockerAdmin) external onlyOwner {
+        require(newLockerAdmin != address(0), "ERR_INVALID_VALUE");
+        lockerAdmin = newLockerAdmin;
+        emit LogLockerAdminUpdated(msg.sender, newLockerAdmin);
     }
 
     /**********************
@@ -596,7 +601,9 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (protocolFeeBIPS > 0) {
             uint256 balanceAfter = address(this).balance;
             uint256 protocolFee = ((balanceAfter - balanceBefore) * protocolFeeBIPS) / 10_000;
-            payable(treasury).transfer(protocolFee);
+
+            (bool sent, ) = treasury.call{value: protocolFee}("");
+            require(sent, "ERR_FAILED_TO_SEND_PROTOCOL_FEE");
         }
     }
 
@@ -648,6 +655,32 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
      **********************/
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+
+    function _currentStakeValue(address payable vault) internal view returns (uint256) {
+        uint256 toValidatorID = Vault(vault).toValidatorID();
+        uint256 stake = SFC.getStake(vault, toValidatorID);
+        uint256 rewardsAll = SFC.pendingRewards(vault, toValidatorID);
+        uint256 rewardsReal = rewardsAll - (rewardsAll * protocolFeeBIPS) / 10_000;
+        (, , uint256 matured) = SFC.getWithdrawalRequest(vault, toValidatorID, 0);
+        uint256 penalty;
+        bool isSlashed = SFC.isSlashed(toValidatorID);
+        if (isSlashed) {
+            penalty = _getSlashingPenalty(stake + matured, SFC.slashingRefundRatio(toValidatorID));
+        }
+        return stake + rewardsReal + matured - penalty;
+    }
+
+    function _getSlashingPenalty(uint256 amount, uint256 refundRatio) internal pure returns (uint256) {
+        if (refundRatio >= DECIMAL_UNIT) {
+            return 0;
+        }
+        // round penalty upwards (ceiling) to prevent dust amount attacks
+        uint256 penalty = ((amount * (DECIMAL_UNIT - refundRatio)) / DECIMAL_UNIT) + 1;
+        if (penalty > amount) {
+            return amount;
+        }
+        return penalty;
+    }
 
     function _createVault(uint256 toValidatorID) internal returns (address payable) {
         require(currentVaultCount < maxVaultCount, "ERR_MAX_VAULTS_OCCUPIED");
@@ -705,6 +738,7 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
                 if (i < vaultCount - 1 || ((i == vaultCount - 1) && Vault(info[i].vault).getLockedStake() == 0)) {
                     // the vault is empty
                     vaultPtr = _decrementWithMod(vaultPtr, maxCount);
+                    emit VaultDeleted(vaultPtr, _allVaults[vaultPtr]);
                     delete _allVaults[vaultPtr];
 
                     _decrementVaultPtr();
@@ -740,7 +774,11 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     function _incrementVaultPtr() internal {
-        currentVaultPtr = _incrementWithMod(currentVaultPtr, maxVaultCount);
+        uint256 candidatePtr = _incrementWithMod(currentVaultPtr, maxVaultCount);
+        while (_allVaults[candidatePtr] != address(0)) {
+            candidatePtr = _incrementWithMod(currentVaultPtr, maxVaultCount);
+        }
+        currentVaultPtr = candidatePtr;
     }
 
     function _decrementVaultPtr() internal {
