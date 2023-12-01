@@ -40,16 +40,17 @@ contract Vault {
     /**
      * @notice Returns the current value of the staked FTM, including rewards and slashing (if any)
      */
-    function currentStakeValue() external view returns (uint256) {
+    function currentStakeValue(uint256 protocolFeeBIPS) external view returns (uint256) {
         uint256 stake = SFC.getStake(address(this), toValidatorID);
-        uint256 rewards = SFC.pendingRewards(address(this), toValidatorID);
+        uint256 rewardsAll = SFC.pendingRewards(address(this), toValidatorID);
+        uint256 rewardsReal = rewardsAll - (rewardsAll * protocolFeeBIPS) / 10_000;
         (, , uint256 matured) = SFC.getWithdrawalRequest(address(this), toValidatorID, 0);
         uint256 penalty;
         bool isSlashed = SFC.isSlashed(toValidatorID);
         if (isSlashed) {
             penalty = _getSlashingPenalty(stake + matured);
         }
-        return stake + rewards + matured - penalty;
+        return stake + rewardsReal + matured - penalty;
     }
 
     /**
