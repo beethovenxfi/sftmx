@@ -1,47 +1,189 @@
+// yarn hardhat run --network fantom .\scripts\get_maxlock_duration.ts
 // @ts-ignore
 import { ethers } from 'hardhat'
-import { BigNumber } from 'ethers/lib/ethers'
-import FTMStaking from '../artifacts/contracts/FTMStaking.sol/FTMStaking.json'
 import SFCContract from '../artifacts/contracts/interfaces/ISFC.sol/ISFC.json'
-import Vault from '../artifacts/contracts/Vault.sol/Vault.json'
-import ValidatorPicker from '../artifacts/contracts/ValidatorPicker.sol/ValidatorPicker.json'
 import moment from 'moment-timezone'
+import fs from 'fs'
+import { parseUnits } from 'ethers/lib/utils'
+
+interface SafeTransactionBatch {
+    version: string
+    chainId: string
+    createdAt: number
+    meta: Meta
+    transactions: Transaction[]
+}
+
+interface Meta {
+    name: string
+    description: string
+    txBuilderVersion: string
+    createdFromSafeAddress: string
+    createdFromOwnerAddress: string
+    checksum: string
+}
+
+interface Transaction {
+    to: string
+    value: string
+    data: any
+    contractMethod: ContractMethod
+    contractInputsValues: ContractInputsValues
+}
+
+interface ContractMethod {
+    inputs: Input[]
+    name: string
+    payable: boolean
+}
+
+interface Input {
+    name: string
+    type: string
+    internalType?: string
+}
+
+export interface ContractInputsValues {
+    toValidatorID?: string
+    lockupDuration?: string
+    amount?: string
+}
+
+const SFC = '0xFC00FACE00000000000000000000000000000000'
+const VALIDATOR_PICKER = '0x3ea7B81689C5161882f51c57Aa0049D7C5E46A0E'
+const FTM_STAKING_PROXY = '0xB458BfC855ab504a8a327720FcEF98886065529b'
 
 async function main() {
-    const SFC = '0xFC00FACE00000000000000000000000000000000'
-    const VALIDATOR_PICKER = '0xb09101eC9B3EC745129aC8e9c8a45F90B23c483C'
-    const FTM_STAKING_PROXY = '0xB458BfC855ab504a8a327720FcEF98886065529b'
     const ONE_HOUR_IN_SECONDS = 1 * 60 * 60
 
-    const validatorIds = [
-        67, // maybe not
-        37, // fiery 500k
-        63, // fiery 500k
-        129, // mcjigs 500k
-        48, // 1M fantom india
+    const validatorsToDelegate = [
+        {
+            validatorId: 37, // fiery mftm
+            amount: 500000,
+            duration: 0,
+        },
+        {
+            validatorId: 63, // fiery mftm
+            amount: 500000,
+            duration: 0,
+        },
+        // 67, // maybe not
+        // 37, // fiery 500k
+        // 63, // fiery 500k
+        // 129, // mcjigs 500k
+        // 48, // 1M fantom india
     ]
 
     const sfcContract = await ethers.getContractAt(SFCContract.abi, SFC)
 
-    for (const validatorId of validatorIds) {
-        const validatorInfo = await sfcContract.getValidator(validatorId)
+    for (const validator of validatorsToDelegate) {
+        const validatorInfo = await sfcContract.getValidator(validator.validatorId)
         const validatorAuth = validatorInfo[6]
         console.log(validatorAuth)
-        const lockupInfo = await sfcContract.getLockupInfo(validatorAuth, validatorId)
+        const lockupInfo = await sfcContract.getLockupInfo(validatorAuth, validator.validatorId)
         const endTimestamp = lockupInfo[2] as number
         const endTime = moment.unix(endTimestamp)
         const secondsToEndtime = endTimestamp - moment().utc().unix()
-        const maxLock = secondsToEndtime - ONE_HOUR_IN_SECONDS * 12
+        const maxLock = secondsToEndtime - ONE_HOUR_IN_SECONDS * 6
+        validator.duration = maxLock
 
         console.log(
-            `Validator ${validatorId} locked until ${endTime} which is in ${secondsToEndtime / 60 / 60 / 24} days`,
+            `Validator ${validator.validatorId} locked until ${endTime} which is in ${
+                secondsToEndtime / 60 / 60 / 24
+            } days`,
         )
-        console.log(`Max lock duration (minus 12 hours) is ${maxLock} which is in ${maxLock / 60 / 60 / 24} days`)
+        console.log(`Max lock duration (minus 6 hours) is ${maxLock} which is in ${maxLock / 60 / 60 / 24} days`)
 
         console.log(`-----------------------------`)
-        console.log(`ValidatorId: ${validatorId}`)
-        console.log(`Duration: ${maxLock}`)
+        console.log(`ValidatorId: ${validator.validatorId}`)
+        console.log(`Duration: ${maxLock} (${maxLock / 60 / 60 / 24} days)`)
+        console.log(`Amount: ${validator.amount}`)
         console.log(`-----------------------------`)
+    }
+    createTxnBatch(validatorsToDelegate)
+}
+
+function createTxnBatch(
+    validators: {
+        validatorId: number
+        amount: number
+        duration: number
+    }[],
+) {
+    let lockTxns: Transaction[] = []
+    let name: string
+
+    for (const validator of validators) {
+        const ftmAmountScaled = parseUnits(`${validator.amount}`, 18)
+
+        // setNextValidator info with validator ID and duration on validatorpicker contract
+        lockTxns.push({
+            to: VALIDATOR_PICKER,
+            value: '0',
+            data: null,
+            contractMethod: {
+                inputs: [
+                    {
+                        internalType: 'uint256',
+                        name: 'toValidatorID',
+                        type: 'uint256',
+                    },
+                    {
+                        internalType: 'uint256',
+                        name: 'lockupDuration',
+                        type: 'uint256',
+                    },
+                ],
+                name: 'setNextValidatorInfo',
+                payable: false,
+            },
+            contractInputsValues: {
+                toValidatorID: validator.validatorId.toString(),
+                lockupDuration: validator.duration.toString(),
+            },
+        })
+
+        // lock to the previously set validator
+        lockTxns.push({
+            to: FTM_STAKING_PROXY,
+            value: '0',
+            data: null,
+            contractMethod: {
+                inputs: [
+                    {
+                        internalType: 'uint256',
+                        name: 'amount',
+                        type: 'uint256',
+                    },
+                ],
+                name: 'lock',
+                payable: false,
+            },
+            contractInputsValues: {
+                amount: ftmAmountScaled.toString(),
+            },
+        })
+    }
+
+    if (lockTxns.length > 0) {
+        const transactionBatch: SafeTransactionBatch = {
+            version: '1.0',
+            chainId: '250',
+            createdAt: 1678892613523,
+            meta: {
+                name: 'Transactions Batch',
+                description: '',
+                txBuilderVersion: '1.16.3',
+                createdFromSafeAddress: '0xa1E849B1d6c2Fd31c63EEf7822e9E0632411ada7',
+                createdFromOwnerAddress: '',
+                checksum: '0x9055a79728fb3ff687a24ae4718e700bda884f9a4f86dc9570621d7b7782ba0f',
+            },
+            transactions: lockTxns,
+        }
+
+        name = `lock_ftm_${new Date().getTime()}.json`
+
+        fs.writeFileSync(name, JSON.stringify(transactionBatch, null, 2))
     }
 }
 

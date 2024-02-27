@@ -1,0 +1,103 @@
+{
+  "version": "1.0",
+  "chainId": "250",
+  "createdAt": 1678892613523,
+  "meta": {
+    "name": "Transactions Batch",
+    "description": "",
+    "txBuilderVersion": "1.16.3",
+    "createdFromSafeAddress": "0xa1E849B1d6c2Fd31c63EEf7822e9E0632411ada7",
+    "createdFromOwnerAddress": "",
+    "checksum": "0x9055a79728fb3ff687a24ae4718e700bda884f9a4f86dc9570621d7b7782ba0f"
+  },
+  "transactions": [
+    {
+      "to": "0x3ea7B81689C5161882f51c57Aa0049D7C5E46A0E",
+      "value": "0",
+      "data": null,
+      "contractMethod": {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "toValidatorID",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "lockupDuration",
+            "type": "uint256"
+          }
+        ],
+        "name": "setNextValidatorInfo",
+        "payable": false
+      },
+      "contractInputsValues": {
+        "toValidatorID": "37",
+        "lockupDuration": "31291103"
+      }
+    },
+    {
+      "to": "0xB458BfC855ab504a8a327720FcEF98886065529b",
+      "value": "0",
+      "data": null,
+      "contractMethod": {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "amount",
+            "type": "uint256"
+          }
+        ],
+        "name": "lock",
+        "payable": false
+      },
+      "contractInputsValues": {
+        "amount": "500000000000000000000000"
+      }
+    },
+    {
+      "to": "0x3ea7B81689C5161882f51c57Aa0049D7C5E46A0E",
+      "value": "0",
+      "data": null,
+      "contractMethod": {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "toValidatorID",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "lockupDuration",
+            "type": "uint256"
+          }
+        ],
+        "name": "setNextValidatorInfo",
+        "payable": false
+      },
+      "contractInputsValues": {
+        "toValidatorID": "63",
+        "lockupDuration": "31291177"
+      }
+    },
+    {
+      "to": "0xB458BfC855ab504a8a327720FcEF98886065529b",
+      "value": "0",
+      "data": null,
+      "contractMethod": {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "amount",
+            "type": "uint256"
+          }
+        ],
+        "name": "lock",
+        "payable": false
+      },
+      "contractInputsValues": {
+        "amount": "500000000000000000000000"
+      }
+    }
+  ]
+}
