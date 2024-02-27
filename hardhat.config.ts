@@ -5,6 +5,7 @@ import '@nomiclabs/hardhat-ethers'
 import '@nomiclabs/hardhat-waffle'
 // import 'hardhat-typechain'
 import 'dotenv/config'
+// import '@nomicfoundation/hardhat-verify'
 
 const accounts = [`0x${process.env.DEPLOYER!}`]
 
