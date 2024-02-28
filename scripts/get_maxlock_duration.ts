@@ -79,12 +79,11 @@ async function main() {
     for (const validator of validatorsToDelegate) {
         const validatorInfo = await sfcContract.getValidator(validator.validatorId)
         const validatorAuth = validatorInfo[6]
-        console.log(validatorAuth)
         const lockupInfo = await sfcContract.getLockupInfo(validatorAuth, validator.validatorId)
         const endTimestamp = lockupInfo[2] as number
         const endTime = moment.unix(endTimestamp)
         const secondsToEndtime = endTimestamp - moment().utc().unix()
-        const maxLock = secondsToEndtime - ONE_HOUR_IN_SECONDS * 6
+        const maxLock = secondsToEndtime - ONE_HOUR_IN_SECONDS * 8
         validator.duration = maxLock
 
         console.log(
@@ -92,7 +91,7 @@ async function main() {
                 secondsToEndtime / 60 / 60 / 24
             } days`,
         )
-        console.log(`Max lock duration (minus 6 hours) is ${maxLock} which is in ${maxLock / 60 / 60 / 24} days`)
+        console.log(`Max lock duration (minus 8 hours) is ${maxLock} which is in ${maxLock / 60 / 60 / 24} days`)
 
         console.log(`-----------------------------`)
         console.log(`ValidatorId: ${validator.validatorId}`)
