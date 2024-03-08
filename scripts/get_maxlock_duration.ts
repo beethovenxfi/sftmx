@@ -58,12 +58,7 @@ async function main() {
 
     const validatorsToDelegate = [
         {
-            validatorId: 37, // fiery mftm
-            amount: 500000,
-            duration: 0,
-        },
-        {
-            validatorId: 63, // fiery mftm
+            validatorId: 48, // fiery mftm
             amount: 500000,
             duration: 0,
         },
