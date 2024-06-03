@@ -41,9 +41,9 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /**
-     * @dev A reference to the FTMX ERC20 token contract
+     * @dev A reference to the BXFTM ERC20 token contract
      */
-    IERC20Burnable public FTMX;
+    IERC20Burnable public BXFTM;
 
     /**
      * @dev A reference to the SFC contract
@@ -130,8 +130,8 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     event LogDepositLimitUpdated(address indexed owner, uint256 low, uint256 high);
 
     event LogVaultOwnerUpdated(address indexed owner, address vault, address newOwner);
-    event LogDeposited(address indexed user, uint256 amount, uint256 ftmxAmount);
-    event LogUndelegated(address indexed user, uint256 wrID, uint256 amountFTMx);
+    event LogDeposited(address indexed user, uint256 amount, uint256 bxFTMAmount);
+    event LogUndelegated(address indexed user, uint256 wrID, uint256 amountBxFTM);
     event LogWithdrawn(address indexed user, uint256 wrID, uint256 totalAmount, uint256 bitmaskToSkip);
     event LogLocked(address indexed vault, uint256 lockupDuration, uint256 amount);
     event LogVaultHarvested(address indexed vault, uint256 maturedIndex);
@@ -142,14 +142,14 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /**
      * @notice Initializer
-     * @param _ftmx_ the address of the FTM token contract (is NOT modifiable)
+     * @param _bxFTM_ the address of the FTM token contract (is NOT modifiable)
      * @param _sfc_ the address of the SFC contract (is NOT modifiable)
      * @param maxVaultCount_ the maximum number of vaults to be created (is NOT modifiable)
      * @param epochDuration_ the duration of a locking epoch (is modifiable)
      * @param withdrawalDelay_ the delay between undelegation & withdrawal (is modifiable)
      */
     function initialize(
-        IERC20Burnable _ftmx_,
+        IERC20Burnable _bxFTM_,
         ISFC _sfc_,
         uint256 maxVaultCount_,
         uint256 epochDuration_,
@@ -158,7 +158,7 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         __Ownable_init();
         __UUPSUpgradeable_init();
 
-        FTMX = _ftmx_;
+        BXFTM = _bxFTM_;
         SFC = _sfc_;
 
         maxVaultCount = maxVaultCount_;
@@ -239,46 +239,46 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /**
-     * @notice Returns the amount of FTM equivalent 1 FTMX (with 18 decimals)
+     * @notice Returns the amount of FTM equivalent 1 BXFTM (with 18 decimals)
      */
     function getExchangeRate() public view returns (uint256) {
         uint256 totalFTM = totalFTMWorth();
-        uint256 totalFTMx = FTMX.totalSupply();
+        uint256 totalBxFTM = BXFTM.totalSupply();
 
-        if (totalFTM == 0 || totalFTMx == 0) {
+        if (totalFTM == 0 || totalBxFTM == 0) {
             return 1 * DECIMAL_UNIT;
         }
-        return (totalFTM * DECIMAL_UNIT) / totalFTMx;
+        return (totalFTM * DECIMAL_UNIT) / totalBxFTM;
     }
 
     /**
-     * @notice Returns the amount of FTMX equivalent to the provided FTM
+     * @notice Returns the amount of BXFTM equivalent to the provided FTM
      * @param ftmAmount the amount of FTM
      * @param toIgnore flag to ignore input ftmAmount from calculations (must be true for deposits)
      */
-    function getFTMxAmountForFTM(uint256 ftmAmount, bool toIgnore) public view returns (uint256) {
+    function getBxFTMAmountForFTM(uint256 ftmAmount, bool toIgnore) public view returns (uint256) {
         uint256 totalFTM = totalFTMWorth();
-        uint256 totalFTMx = FTMX.totalSupply();
+        uint256 totalBxFTM = BXFTM.totalSupply();
 
         if (toIgnore) {
             totalFTM -= ftmAmount;
         }
 
-        if (totalFTM == 0 || totalFTMx == 0) {
+        if (totalFTM == 0 || totalBxFTM == 0) {
             return ftmAmount;
         }
-        return (ftmAmount * totalFTMx) / totalFTM;
+        return (ftmAmount * totalBxFTM) / totalFTM;
     }
 
     /**
-     * @notice Returns the penalty to be charged on undelegating the given amount of FTMx
-     * @param amountFTMx the amount of FTMx to undelegate
+     * @notice Returns the penalty to be charged on undelegating the given amount of BxFTM
+     * @param amountBxFTM the amount of BxFTM to undelegate
      * @return amount the amount of FTM the input is worth
      * @return amountToUndelegate the amount of FTM coming from the vaults
      * @return penalty the total penalty (in FTM) applicable on undelegation
      */
-    function calculatePenalty(uint256 amountFTMx) public view returns (uint256, uint256, uint256) {
-        uint256 amount = (amountFTMx * getExchangeRate()) / DECIMAL_UNIT;
+    function calculatePenalty(uint256 amountBxFTM) public view returns (uint256, uint256, uint256) {
+        uint256 amount = (amountBxFTM * getExchangeRate()) / DECIMAL_UNIT;
         uint256 poolBalance = getPoolBalance();
 
         if (amount <= poolBalance) {
@@ -469,34 +469,34 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
      **********************/
 
     /**
-     * @notice Deposit FTM, and mint FTMX
+     * @notice Deposit FTM, and mint BXFTM
      */
     function deposit() external payable {
         uint256 amount = msg.value;
         require(amount >= minDeposit && amount <= maxDeposit, "ERR_AMOUNT_OUTSIDE_LIMITS");
 
-        uint256 ftmxAmount = getFTMxAmountForFTM(amount, true);
-        FTMX.mint(msg.sender, ftmxAmount);
+        uint256 bxFTMAmount = getBxFTMAmountForFTM(amount, true);
+        BXFTM.mint(msg.sender, bxFTMAmount);
 
-        emit LogDeposited(msg.sender, msg.value, ftmxAmount);
+        emit LogDeposited(msg.sender, msg.value, bxFTMAmount);
     }
 
     /**
-     * @notice Undelegate FTMx, corresponding FTM can then be withdrawn after `withdrawalDelay`
+     * @notice Undelegate BxFTM, corresponding FTM can then be withdrawn after `withdrawalDelay`
      * @param wrID a unique withdrawal ID
-     * @param amountFTMx the amount of FTMx to undelegate
+     * @param amountBxFTM the amount of BxFTM to undelegate
      * @param minAmountFTM the minimum amount of FTM to receive
      *
      * Requirements:
      *  - wrID must not be used before
      *  - wrID must be greater than 0
      */
-    function undelegate(uint256 wrID, uint256 amountFTMx, uint256 minAmountFTM) external {
+    function undelegate(uint256 wrID, uint256 amountBxFTM, uint256 minAmountFTM) external {
         require(!undelegatePaused, "ERR_UNDELEGATE_IS_PAUSED");
 
-        _undelegate(msg.sender, wrID, amountFTMx, minAmountFTM);
+        _undelegate(msg.sender, wrID, amountBxFTM, minAmountFTM);
 
-        emit LogUndelegated(msg.sender, wrID, amountFTMx);
+        emit LogUndelegated(msg.sender, wrID, amountBxFTM);
     }
 
     /**
@@ -670,8 +670,8 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         return true;
     }
 
-    function _undelegate(address user, uint256 wrID, uint256 amountFTMx, uint256 minAmountFTM) internal {
-        require(amountFTMx > 0, "ERR_ZERO_AMOUNT");
+    function _undelegate(address user, uint256 wrID, uint256 amountBxFTM, uint256 minAmountFTM) internal {
+        require(amountBxFTM > 0, "ERR_ZERO_AMOUNT");
         require(wrID > 0, "ERR_wrID_MUST_BE_NON_ZERO");
 
         WithdrawalRequest storage request = allWithdrawalRequests[wrID];
@@ -680,10 +680,10 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         request.requestTime = _now();
         request.user = user;
 
-        (uint256 amount, uint256 totalAmountToUndelegate, uint256 penalty) = calculatePenalty(amountFTMx);
+        (uint256 amount, uint256 totalAmountToUndelegate, uint256 penalty) = calculatePenalty(amountBxFTM);
         require(amount - penalty >= minAmountFTM, "ERR_INSUFFICIENT_AMOUNT_OUT");
 
-        FTMX.burnFrom(user, amountFTMx);
+        BXFTM.burnFrom(user, amountBxFTM);
 
         if (totalAmountToUndelegate == 0) {
             // no penalty, all from pool
