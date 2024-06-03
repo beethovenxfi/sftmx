@@ -80,12 +80,13 @@ describe('Testing FTM staking', function () {
     it('adding rewards and increase rate', async () => {
         const rateBefore = (await ftmStaking.getExchangeRate()) as BigNumber
         const vaultAddress = await ftmStaking.getVault(0)
+        const protocolFeeBIPS = await ftmStaking.protocolFeeBIPS()
         await sfcMock.setPendingRewards(vaultAddress, validatorId, ethers.utils.parseUnits('1'), {
             value: ethers.utils.parseUnits('1'),
         })
 
         const vault = await ethers.getContractAt('Vault', vaultAddress)
-        const vaultStake = await vault.currentStakeValue()
+        const vaultStake = await vault.currentStakeValue(protocolFeeBIPS)
 
         const totalFtm = await ftmStaking.totalFTMWorth()
         const poolBalance = await ftmStaking.getPoolBalance()
@@ -101,7 +102,7 @@ describe('Testing FTM staking', function () {
         expect(rateDiff).not.to.be.equal(0)
     })
 
-    it('harvest rewards, pay fees and lower rate', async () => {
+    it('harvest rewards, pay fees and keep rate', async () => {
         await ftmStaking.setProtocolFeeBIPS(1000) // 10%
         const rateBefore = (await ftmStaking.getExchangeRate()) as BigNumber
         const vaultAddress = await ftmStaking.getVault(0)
@@ -122,8 +123,8 @@ describe('Testing FTM staking', function () {
         // expect(totalFtm).to.be.equal(151)
         // expect(poolBalance).to.be.equal(50)
         // expect(vaultCount).to.be.equal(1)
-        // expect(rateBefore).not.to.be.equal(rateAfter)
-        // expect(rateDiff).not.to.be.equal(0)
+        expect(rateBefore).to.be.equal(rateAfter)
+        expect(rateDiff).to.be.equal(0)
     })
 })
 
