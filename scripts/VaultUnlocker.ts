@@ -34,6 +34,134 @@ describe('Undelegate from vault and withdraw', function () {
         console.log('vault count', vault)
     })
 
+    it('retrieve excess FTM', async () => {
+        const VAULT_ADDRESS = AFFECTED_VAULT_200K
+
+        const treasury = await ethers.getImpersonatedSigner(TREASURY_ADDRESS)
+
+        const vaultUnlocker = (await deployContract('VaultUnlocker', [FTM_STAKING_PROXY, VAULT_ADDRESS])) as Contract
+
+        const balanceTreasuryBefore = await ethers.provider.getBalance(TREASURY_ADDRESS)
+
+        // fund the unlocker
+        const tx = {
+            to: vaultUnlocker.address,
+            value: parseEther('1000'),
+        }
+        const fundTxn = await treasury.sendTransaction(tx)
+        await fundTxn.wait()
+
+        const retrieveTxn = await vaultUnlocker.connect(treasury).retrieveFtm()
+        await retrieveTxn.wait()
+
+        const balanceTreasuryAfter = await ethers.provider.getBalance(TREASURY_ADDRESS)
+        const balanceUnlockerAfter = await ethers.provider.getBalance(vaultUnlocker.address)
+
+        console.log(`Treasury balance diff: ${formatEther(balanceTreasuryAfter.sub(balanceTreasuryBefore))}`)
+
+        expect(balanceUnlockerAfter).to.be.equal(0)
+        // only some gas used
+        expect(parseFloat(formatEther(balanceTreasuryBefore.sub(balanceTreasuryAfter)))).to.be.lessThan(0.01)
+    })
+
+    it('revert if not treasury for unlock', async () => {
+        const VAULT_ADDRESS = AFFECTED_VAULT_200K
+
+        const vaultUnlocker = (await deployContract('VaultUnlocker', [FTM_STAKING_PROXY, VAULT_ADDRESS])) as Contract
+
+        // unlock the vault
+        await expect(vaultUnlocker.unlockVault()).to.be.revertedWith('ERR_UNAUTHORIZED_CALLER')
+    })
+
+    it('revert if not owner for ownership', async () => {
+        const VAULT_ADDRESS = AFFECTED_VAULT_200K
+
+        const treasury = await ethers.getImpersonatedSigner(TREASURY_ADDRESS)
+
+        const vaultUnlocker = (await deployContract('VaultUnlocker', [FTM_STAKING_PROXY, VAULT_ADDRESS])) as Contract
+
+        // revert the ownership
+        await expect(vaultUnlocker.connect(treasury).revertOwnership()).to.be.revertedWith('ERR_UNAUTHORIZED')
+    })
+
+    it('revert ownership of the contract', async () => {
+        const VAULT_ADDRESS = AFFECTED_VAULT_200K
+
+        const staking = await ethers.getContractAt(FTMStakingAbi.abi, FTM_STAKING_PROXY)
+        const vault = await ethers.getContractAt(VaultAbi.abi, VAULT_ADDRESS)
+        const treasury = await ethers.getImpersonatedSigner(TREASURY_ADDRESS)
+
+        const vaultUnlocker = (await deployContract('VaultUnlocker', [FTM_STAKING_PROXY, VAULT_ADDRESS])) as Contract
+
+        // change owner of vault
+        const changeOwnerTxn = await staking.connect(treasury).updateVaultOwner(vault.address, vaultUnlocker.address)
+        await changeOwnerTxn.wait()
+        console.log('Change owner successfull')
+
+        expect(await vault.owner()).to.be.equal(vaultUnlocker.address)
+
+        const revertOwnerTxn = await vaultUnlocker.connect(treasury).revertOwnership()
+        await revertOwnerTxn.wait()
+        console.log('revert owner successfull')
+
+        expect(await vault.owner()).to.be.equal(FTM_STAKING_PROXY)
+    })
+
+    it('revert if not treasury for ownership', async () => {
+        const VAULT_ADDRESS = AFFECTED_VAULT_200K
+
+        const vaultUnlocker = (await deployContract('VaultUnlocker', [FTM_STAKING_PROXY, VAULT_ADDRESS])) as Contract
+
+        // revert the ownership
+        await expect(vaultUnlocker.revertOwnership()).to.be.revertedWith('ERR_UNAUTHORIZED_CALLER')
+    })
+
+    it('revert if not owner', async () => {
+        const VAULT_ADDRESS = AFFECTED_VAULT_200K
+
+        const treasury = await ethers.getImpersonatedSigner(TREASURY_ADDRESS)
+
+        const vaultUnlocker = (await deployContract('VaultUnlocker', [FTM_STAKING_PROXY, VAULT_ADDRESS])) as Contract
+
+        // unlock the vault
+        await expect(vaultUnlocker.connect(treasury).unlockVault()).to.be.revertedWith('ERR_UNAUTHORIZED')
+    })
+
+    it('revert if not enough FTM', async () => {
+        const VAULT_ADDRESS = AFFECTED_VAULT_200K
+
+        const staking = await ethers.getContractAt(FTMStakingAbi.abi, FTM_STAKING_PROXY)
+        const vault = await ethers.getContractAt(VaultAbi.abi, VAULT_ADDRESS)
+        const treasury = await ethers.getImpersonatedSigner(TREASURY_ADDRESS)
+
+        const vaultUnlocker = (await deployContract('VaultUnlocker', [FTM_STAKING_PROXY, VAULT_ADDRESS])) as Contract
+
+        // fund the unlocker
+        const tx = {
+            to: vaultUnlocker.address,
+            value: parseEther('100'),
+        }
+        const fundTxn = await treasury.sendTransaction(tx)
+        await fundTxn.wait()
+        console.log('Funding successfull')
+
+        // change owner of vault
+        const changeOwnerTxn = await staking.connect(treasury).updateVaultOwner(vault.address, vaultUnlocker.address)
+        await changeOwnerTxn.wait()
+        console.log('Change owner successfull')
+
+        // unlock the vault
+        await expect(vaultUnlocker.connect(treasury).unlockVault()).to.be.revertedWith('ERR_INSUFFICIENT_FUNDS')
+
+        const retrieveTxn = await vaultUnlocker.connect(treasury).retrieveFtm()
+        await retrieveTxn.wait()
+        console.log('Retrieval successfull')
+
+        const revertOwnerTxn = await vaultUnlocker.connect(treasury).revertOwnership()
+        await revertOwnerTxn.wait()
+        console.log('revert owner successfull')
+    })
+
     it('withdraw from vault to staking', async () => {
         const VAULT_ADDRESS = AFFECTED_VAULT_200K
         const vaultId = 39
@@ -42,13 +170,16 @@ describe('Undelegate from vault and withdraw', function () {
         const vault = await ethers.getContractAt(VaultAbi.abi, VAULT_ADDRESS)
         const treasury = await ethers.getImpersonatedSigner(TREASURY_ADDRESS)
 
-        const vaultUnlocker = (await deployContract('VaultUnlocker', [
-            FTM_STAKING_PROXY,
-            VAULT_ADDRESS,
-            TREASURY_ADDRESS,
-        ])) as Contract
+        const vaultUnlocker = (await deployContract('VaultUnlocker', [FTM_STAKING_PROXY, VAULT_ADDRESS])) as Contract
 
-        console.log('Vault unlocker deployed at', vaultUnlocker.address)
+        // fund the unlocker
+        const tx = {
+            to: vaultUnlocker.address,
+            value: parseEther('1000'),
+        }
+        const fundTxn = await treasury.sendTransaction(tx)
+        await fundTxn.wait()
+        console.log('Funding successfull')
 
         // change owner of vault
         const changeOwnerTxn = await staking.connect(treasury).updateVaultOwner(vault.address, vaultUnlocker.address)
@@ -60,9 +191,13 @@ describe('Undelegate from vault and withdraw', function () {
         const totalFtmBefore = await staking.totalFTMWorth()
 
         // unlock the vault
-        const unlockTxn = await vaultUnlocker.connect(treasury).unlockVault({ value: parseEther('1000') })
+        const unlockTxn = await vaultUnlocker.connect(treasury).unlockVault()
         await unlockTxn.wait()
         console.log('unlock successful')
+
+        const retrieveTxn = await vaultUnlocker.connect(treasury).retrieveFtm()
+        await retrieveTxn.wait()
+        console.log('Retrieval successfull')
 
         const balanceTreasuryAfter = await ethers.provider.getBalance(TREASURY_ADDRESS)
         const balanceUnlockerAfter = await ethers.provider.getBalance(vaultUnlocker.address)
@@ -110,128 +245,5 @@ describe('Undelegate from vault and withdraw', function () {
         expect(formatEther(totalFtmBefore.sub(totalFtmFinish))).to.be.equal('0.0')
         // make sure that the pool balance has increased after harvest
         expect(parseFloat(formatEther(ftmInPoolFinish.sub(ftmInPoolBefore)))).to.be.greaterThan(0)
-    })
-
-    it('revert if not treasury for unlock', async () => {
-        const VAULT_ADDRESS = AFFECTED_VAULT_200K
-
-        const vaultUnlocker = (await deployContract('VaultUnlocker', [
-            FTM_STAKING_PROXY,
-            VAULT_ADDRESS,
-            TREASURY_ADDRESS,
-        ])) as Contract
-
-        console.log('Vault unlocker deployed at', vaultUnlocker.address)
-
-        // unlock the vault
-        await expect(vaultUnlocker.unlockVault({ value: parseEther('1000') })).to.be.revertedWith(
-            'ERR_UNAUTHORIZED_CALLER',
-        )
-    })
-
-    it('revert if not owner for ownership', async () => {
-        const VAULT_ADDRESS = AFFECTED_VAULT_200K
-
-        const treasury = await ethers.getImpersonatedSigner(TREASURY_ADDRESS)
-
-        const vaultUnlocker = (await deployContract('VaultUnlocker', [
-            FTM_STAKING_PROXY,
-            VAULT_ADDRESS,
-            TREASURY_ADDRESS,
-        ])) as Contract
-
-        console.log('Vault unlocker deployed at', vaultUnlocker.address)
-
-        // revert the ownership
-        await expect(vaultUnlocker.connect(treasury).revertOwnership()).to.be.revertedWith('ERR_UNAUTHORIZED')
-    })
-
-    it('revert ownership of the contract', async () => {
-        const VAULT_ADDRESS = AFFECTED_VAULT_200K
-
-        const staking = await ethers.getContractAt(FTMStakingAbi.abi, FTM_STAKING_PROXY)
-        const vault = await ethers.getContractAt(VaultAbi.abi, VAULT_ADDRESS)
-        const treasury = await ethers.getImpersonatedSigner(TREASURY_ADDRESS)
-
-        const vaultUnlocker = (await deployContract('VaultUnlocker', [
-            FTM_STAKING_PROXY,
-            VAULT_ADDRESS,
-            TREASURY_ADDRESS,
-        ])) as Contract
-
-        console.log('Vault unlocker deployed at', vaultUnlocker.address)
-
-        // change owner of vault
-        const changeOwnerTxn = await staking.connect(treasury).updateVaultOwner(vault.address, vaultUnlocker.address)
-        await changeOwnerTxn.wait()
-        console.log('Change owner successfull')
-
-        expect(await vault.owner()).to.be.equal(vaultUnlocker.address)
-
-        const revertOwnerTxn = await vaultUnlocker.connect(treasury).revertOwnership()
-        await revertOwnerTxn.wait()
-        console.log('revert owner successfull')
-
-        expect(await vault.owner()).to.be.equal(FTM_STAKING_PROXY)
-    })
-
-    it('revert if not treasury for ownership', async () => {
-        const VAULT_ADDRESS = AFFECTED_VAULT_200K
-
-        const vaultUnlocker = (await deployContract('VaultUnlocker', [
-            FTM_STAKING_PROXY,
-            VAULT_ADDRESS,
-            TREASURY_ADDRESS,
-        ])) as Contract
-
-        console.log('Vault unlocker deployed at', vaultUnlocker.address)
-
-        // revert the ownership
-        await expect(vaultUnlocker.revertOwnership()).to.be.revertedWith('ERR_UNAUTHORIZED_CALLER')
-    })
-
-    it('revert if not owner', async () => {
-        const VAULT_ADDRESS = AFFECTED_VAULT_200K
-
-        const treasury = await ethers.getImpersonatedSigner(TREASURY_ADDRESS)
-
-        const vaultUnlocker = (await deployContract('VaultUnlocker', [
-            FTM_STAKING_PROXY,
-            VAULT_ADDRESS,
-            TREASURY_ADDRESS,
-        ])) as Contract
-
-        console.log('Vault unlocker deployed at', vaultUnlocker.address)
-
-        // unlock the vault
-        await expect(vaultUnlocker.connect(treasury).unlockVault({ value: parseEther('1000') })).to.be.revertedWith(
-            'ERR_UNAUTHORIZED',
-        )
-    })
-
-    it('revert if not enough FTM', async () => {
-        const VAULT_ADDRESS = AFFECTED_VAULT_200K
-
-        const staking = await ethers.getContractAt(FTMStakingAbi.abi, FTM_STAKING_PROXY)
-        const vault = await ethers.getContractAt(VaultAbi.abi, VAULT_ADDRESS)
-        const treasury = await ethers.getImpersonatedSigner(TREASURY_ADDRESS)
-
-        const vaultUnlocker = (await deployContract('VaultUnlocker', [
-            FTM_STAKING_PROXY,
-            VAULT_ADDRESS,
-            TREASURY_ADDRESS,
-        ])) as Contract
-
-        console.log('Vault unlocker deployed at', vaultUnlocker.address)
-
-        // change owner of vault
-        const changeOwnerTxn = await staking.connect(treasury).updateVaultOwner(vault.address, vaultUnlocker.address)
-        await changeOwnerTxn.wait()
-        console.log('Change owner successfull')
-
-        // unlock the vault
-        await expect(vaultUnlocker.connect(treasury).unlockVault({ value: parseEther('100') })).to.be.revertedWith(
-            'ERR_INSUFFICIENT_FUNDS',
-        )
     })
 })
