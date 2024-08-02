@@ -195,10 +195,6 @@ describe('Undelegate from vault and withdraw', function () {
         await unlockTxn.wait()
         console.log('unlock successful')
 
-        const retrieveTxn = await vaultUnlocker.connect(treasury).retrieveFtm()
-        await retrieveTxn.wait()
-        console.log('Retrieval successfull')
-
         const balanceTreasuryAfter = await ethers.provider.getBalance(TREASURY_ADDRESS)
         const balanceUnlockerAfter = await ethers.provider.getBalance(vaultUnlocker.address)
 

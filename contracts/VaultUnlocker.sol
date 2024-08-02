@@ -49,12 +49,14 @@ contract VaultUnlocker {
         require(sentTotreasry, "Failed to send FTM to treasury");
     }
 
+    // backup function to change the owner back to the staking contract
     function revertOwnership() external {
         require(msg.sender == _treasury, "ERR_UNAUTHORIZED_CALLER");
         require(_vault.owner() == address(this), "ERR_UNAUTHORIZED");
         _vault.updateOwner(address(_staking));
     }
 
+    // backup function to send any excess FTM back to treasury
     function retrieveFtm() external {
         require(msg.sender == _treasury, "ERR_UNAUTHORIZED_CALLER");
         // send any excess FTM back
