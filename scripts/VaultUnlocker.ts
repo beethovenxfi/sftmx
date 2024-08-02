@@ -15,7 +15,7 @@ const TREASURY_ADDRESS = '0xa1E849B1d6c2Fd31c63EEf7822e9E0632411ada7'
 const SEVEN_DAYS_IN_SECONDS = 86400 * 7
 
 // run fork
-// yarn hardhat node --fork https://rpc.ftm.tools/ --fork-block-number 87543149
+// yarn hardhat node --fork https://rpc.ftm.tools/ --fork-block-number 87577640
 // run test
 // yarn hardhat test .\scripts\VaultUnlocker.ts --network localhost
 
@@ -136,7 +136,7 @@ describe('Undelegate from vault and withdraw', function () {
 
         const vaultUnlocker = (await deployContract('VaultUnlocker', [FTM_STAKING_PROXY, VAULT_ADDRESS])) as Contract
 
-        // fund the unlocker
+        // fund the unlocker with not enough FTM
         const tx = {
             to: vaultUnlocker.address,
             value: parseEther('100'),
@@ -210,7 +210,7 @@ describe('Undelegate from vault and withdraw', function () {
         expect(formatEther(rateBefore.sub(rateAfter))).to.be.equal('0.0')
         expect(formatEther(totalFtmBefore.sub(totalFtmAfter))).to.be.equal('0.0')
 
-        console.log('Unlock and refill successfull')
+        console.log('Unlock and refill completed')
 
         const maturedVaultsCount = await staking.getMaturedVaultLength()
         expect(maturedVaultsCount).to.be.equal(0)
