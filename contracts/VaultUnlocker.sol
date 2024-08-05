@@ -6,31 +6,27 @@ import "./Vault.sol";
 import "./FTMStaking.sol";
 
 contract VaultUnlocker {
-    FTMStaking public immutable _staking;
-    Vault public immutable _vault;
+    FTMStaking public immutable _staking = FTMStaking(payable(address(0xB458BfC855ab504a8a327720FcEF98886065529b)));
     address public immutable _treasury = 0xa1E849B1d6c2Fd31c63EEf7822e9E0632411ada7;
 
-    constructor(FTMStaking ftmStaking, Vault vault) {
-        _staking = ftmStaking;
-        _vault = vault;
-    }
+    constructor() {}
 
-    function unlockVault() external {
+    function unlockVault(Vault vault) external {
         require(msg.sender == _treasury, "ERR_UNAUTHORIZED_CALLER");
-        require(_vault.owner() == address(this), "ERR_UNAUTHORIZED");
+        require(vault.owner() == address(this), "ERR_UNAUTHORIZED");
 
         // Need to store to calculate the diff
         uint256 totalFtmBefore = _staking.totalFTMWorth();
         uint256 rateBefore = _staking.getExchangeRate();
 
         // unlocking the vault, this will pay the penalty and not the complete stake will be returned
-        uint256 currentStake = _vault.currentStakeValue();
-        _vault.unlock(currentStake);
+        uint256 currentStake = vault.currentStakeValue();
+        vault.unlock(currentStake);
 
         // calculate the penalty
         uint256 totalFtmAfter = _staking.totalFTMWorth();
         uint256 penalty = totalFtmBefore - totalFtmAfter;
-        require(penalty < address(this).balance, "ERR_INSUFFICIENT_FUNDS");
+        require(penalty < address(this).balance, "ERR_INSUFFICIENT_FUNDS_FOR_PENALTY");
 
         // send FTM to the vault to make up for penalty
         address stakingAddress = address(_staking);
@@ -41,22 +37,17 @@ contract VaultUnlocker {
         require(_staking.getExchangeRate() == rateBefore, "ERR_RATE_CHANGED");
 
         // revert the ownership back to the staking contract
-        _vault.updateOwner(stakingAddress);
-
-        // send any excess FTM back
-        uint256 balance = address(this).balance;
-        (bool sentTotreasry, bytes memory dataTreasury) = _treasury.call{value: balance}("");
-        require(sentTotreasry, "Failed to send FTM to treasury");
+        vault.updateOwner(stakingAddress);
     }
 
     // backup function to change the owner back to the staking contract
-    function revertOwnership() external {
+    function revertOwnership(Vault vault) external {
         require(msg.sender == _treasury, "ERR_UNAUTHORIZED_CALLER");
-        require(_vault.owner() == address(this), "ERR_UNAUTHORIZED");
-        _vault.updateOwner(address(_staking));
+        require(vault.owner() == address(this), "ERR_UNAUTHORIZED");
+        vault.updateOwner(address(_staking));
     }
 
-    // backup function to send any excess FTM back to treasury
+    // send any excess FTM back to treasury
     function retrieveFtm() external {
         require(msg.sender == _treasury, "ERR_UNAUTHORIZED_CALLER");
         // send any excess FTM back
