@@ -38,12 +38,24 @@ const config: HardhatUserConfig = {
     //     excludeContracts: ['contracts/mocks/', 'contracts/libraries/'],
     // },
     mocha: {
-        timeout: 20000,
+        timeout: 10000000,
     },
     // namedAccounts: {
     //     deployer: 0,
     // },
     networks: {
+        hardhat: {
+            // accounts: [
+            //     {
+            //         privateKey: `0x${process.env.DEPLOYER!}`,
+            //         balance: '100000000000000000000000',
+            //     },
+            // ],
+            forking: {
+                url: 'https://rpc.ftm.tools/',
+                blockNumber: 87419145,
+            },
+        },
         ropsten: {
             url: process.env.ROPSTEN_URL || '',
             accounts: process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
@@ -62,6 +74,10 @@ const config: HardhatUserConfig = {
         },
         sonic: {
             url: 'https://rpcapi.sonic.fantom.network/',
+            accounts: process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
+        },
+        optimism: {
+            url: 'https://mainnet.optimism.io',
             accounts: process.env.PRIVATE_KEY !== undefined ? [process.env.PRIVATE_KEY] : [],
         },
     },
