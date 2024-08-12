@@ -16,7 +16,7 @@ const SEVEN_DAYS_IN_SECONDS = 86400 * 7
 
 // run fork
 // anvil -f https://rpc.ftm.tools/ --fork-block-number 87394594
-// yarn hardhat node --fork https://rpc.ftm.tools/ --fork-block-number 87694594
+// yarn hardhat node --fork https://rpc.ftm.tools/ --fork-block-number 88587030
 // run test
 // yarn hardhat test .\scripts\VaultUnlocker.ts --network localhost
 
