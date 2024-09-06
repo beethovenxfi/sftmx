@@ -1,0 +1,59 @@
+{
+  "version": "1.0",
+  "chainId": "250",
+  "createdAt": 1724769636675,
+  "meta": {
+    "name": "Transactions Batch",
+    "description": "",
+    "txBuilderVersion": "1.17.0",
+    "createdFromSafeAddress": "0x417940a3050085723788439D4d69365D50C06d99",
+    "createdFromOwnerAddress": "",
+    "checksum": "0x538908759f04c5a86c256d6ba2f2d5d6ba47b58d5ac866ab07ae83dc02c4c4d8"
+  },
+  "transactions": [
+    {
+      "to": "0xFC00FACE00000000000000000000000000000000",
+      "value": "30000000000000000000000",
+      "data": null,
+      "contractMethod": {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "toValidatorID",
+            "type": "uint256"
+          }
+        ],
+        "name": "delegate",
+        "payable": true
+      },
+      "contractInputsValues": { "toValidatorID": "168" }
+    },
+    {
+      "to": "0xFC00FACE00000000000000000000000000000000",
+      "value": "0",
+      "data": null,
+      "contractMethod": {
+        "inputs": [
+          {
+            "internalType": "uint256",
+            "name": "toValidatorID",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
+            "name": "lockupDuration",
+            "type": "uint256"
+          },
+          { "internalType": "uint256", "name": "amount", "type": "uint256" }
+        ],
+        "name": "relockStake",
+        "payable": false
+      },
+      "contractInputsValues": {
+        "toValidatorID": "168",
+        "lockupDuration": "31536000",
+        "amount": "30000000000000000000000"
+      }
+    }
+  ]
+}

@@ -140,8 +140,7 @@ describe('Test ftm staking contract', function () {
     it('test forking', async () => {
         const staking = await ethers.getContractAt(FTMStakingAbi.abi, FTM_STAKING_PROXY)
 
-        const vault = await staking.currentVaultCount()
-        console.log('vault count', vault)
+        await logVaults(staking)
     })
 
     it('undelegate from free pool and withdraw', async () => {
@@ -339,4 +338,23 @@ async function getStakedAmount(ftmStaking: Contract) {
         }
     }
     return total
+}
+
+async function logVaults(ftmStaking: Contract) {
+    const currentVaultPtr = await ftmStaking.currentVaultPtr()
+    console.log('currentVaultPtr', currentVaultPtr)
+    const maxVaultCount = await ftmStaking.maxVaultCount()
+    console.log('maxVaultCount', maxVaultCount)
+    const currentVaultCount = await ftmStaking.currentVaultCount()
+    console.log('currentVaultCount', currentVaultCount)
+
+    for (let i = 0; i < maxVaultCount; i++) {
+        const vaultAddress = await ftmStaking.getVault(i)
+        console.log(`Vault index ${i} (${vaultAddress})`)
+        if (vaultAddress !== ADDRESS_ZERO) {
+            const vault = await ethers.getContractAt(VaultAbi.abi, vaultAddress)
+            const currentStakeValue = await vault.currentStakeValue()
+            console.log(`Vault index ${i} (${vaultAddress}) has ${formatEther(currentStakeValue)} FTM`)
+        }
+    }
 }
