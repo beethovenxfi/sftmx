@@ -140,6 +140,36 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() initializer {}
 
+    /**
+     * @notice Initializer
+     * @param _ftmx_ the address of the FTM token contract (is NOT modifiable)
+     * @param _sfc_ the address of the SFC contract (is NOT modifiable)
+     * @param maxVaultCount_ the maximum number of vaults to be created (is NOT modifiable)
+     * @param epochDuration_ the duration of a locking epoch (is modifiable)
+     * @param withdrawalDelay_ the delay between undelegation & withdrawal (is modifiable)
+     */
+    function initialize(
+        IERC20Burnable _ftmx_,
+        ISFC _sfc_,
+        uint256 maxVaultCount_,
+        uint256 epochDuration_,
+        uint256 withdrawalDelay_
+    ) public initializer {
+        __Ownable_init();
+        __UUPSUpgradeable_init();
+
+        FTMX = _ftmx_;
+        SFC = _sfc_;
+
+        maxVaultCount = maxVaultCount_;
+        epochDuration = epochDuration_;
+        withdrawalDelay = withdrawalDelay_;
+
+        treasury = msg.sender;
+        minDeposit = 0;
+        maxDeposit = 100 ether;
+    }
+
     /*******************************
      * Getter & helper functions   *
      *******************************/
@@ -340,27 +370,6 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         _lockVault(newVault, lockupDuration, amount);
 
         emit LogLocked(newVault, lockupDuration, amount);
-    }
-
-    function shiftVaultIndex(uint256 vaultIndex, uint256 newVaultIndex) external onlyOwner {
-        uint256 firstVaultIndex = (currentVaultPtr + maxVaultCount - currentVaultCount) % maxVaultCount;
-        uint256 lastVaultIndex = _decrementWithMod(currentVaultPtr, maxVaultCount);
-
-        require(_allVaults[newVaultIndex] == address(0), "ERR_INVALID_NEWVAULT_INDEX");
-        require(_allVaults[vaultIndex] != address(0), "ERR_INVALID_VAULT_INDEX");
-
-        if (firstVaultIndex > lastVaultIndex) {
-            // handle the case where we've hit the maxVaultCount and started again from 0
-            // ie: firstVaultIndex = 80, lastVaultIndex = 5
-            require(newVaultIndex <= lastVaultIndex || newVaultIndex >= firstVaultIndex, "ERR_INVALID_INDEX");
-        } else {
-            // firstVaultIndex <= lastVaultIndex
-            // ie: firstVaultIndex = 20, lastVaultIndex = 60
-            require(newVaultIndex >= firstVaultIndex && newVaultIndex <= lastVaultIndex, "ERR_INVALID_INDEX");
-        }
-
-        _allVaults[newVaultIndex] = _allVaults[vaultIndex];
-        delete _allVaults[vaultIndex];
     }
 
     /**

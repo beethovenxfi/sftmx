@@ -54,19 +54,41 @@ const VALIDATOR_PICKER = '0x3ea7B81689C5161882f51c57Aa0049D7C5E46A0E'
 const FTM_STAKING_PROXY = '0xB458BfC855ab504a8a327720FcEF98886065529b'
 
 async function main() {
-    const ONE_HOUR_IN_SECONDS = 1 * 60 * 60
+    const ONE_HOUR_IN_SECONDS = 60 * 60
+    const ONE_DAY_IN_SECONDS = 24 * ONE_HOUR_IN_SECONDS
+    const ONE_YEAR_IN_SECONDS = 365 * ONE_DAY_IN_SECONDS
 
     const validatorsToDelegate = [
         {
-            validatorId: 48, // fiery mftm
-            amount: 500000,
+            validatorId: 168,
+            amount: 600000,
             duration: 0,
         },
-        // 67, // maybe not
-        // 37, // fiery 500k
-        // 63, // fiery 500k
-        // 129, // mcjigs 500k
-        // 48, // 1M fantom india
+        // {
+        //     validatorId: 51,
+        //     amount: 500000,
+        //     duration: 0,
+        // },
+        // {
+        //     validatorId: 63,
+        //     amount: 500000,
+        //     duration: 0,
+        // },
+        // {
+        //     validatorId: 145,
+        //     amount: 1000000,
+        //     duration: 0,
+        // },
+        // {
+        //     validatorId: 146,
+        //     amount: 1000000,
+        //     duration: 0,
+        // },
+        // {
+        //     validatorId: 147,
+        //     amount: 1000000,
+        //     duration: 0,
+        // },
     ]
 
     const sfcContract = await ethers.getContractAt(SFCContract.abi, SFC)
@@ -78,15 +100,19 @@ async function main() {
         const endTimestamp = lockupInfo[2] as number
         const endTime = moment.unix(endTimestamp)
         const secondsToEndtime = endTimestamp - moment().utc().unix()
-        const maxLock = secondsToEndtime - ONE_HOUR_IN_SECONDS * 8
-        validator.duration = maxLock
+        if (secondsToEndtime < ONE_YEAR_IN_SECONDS - 30 * ONE_DAY_IN_SECONDS) {
+            validator.duration = secondsToEndtime + 29 * ONE_DAY_IN_SECONDS
+        } else {
+            validator.duration = ONE_YEAR_IN_SECONDS
+        }
+        const maxLock = validator.duration
 
         console.log(
             `Validator ${validator.validatorId} locked until ${endTime} which is in ${
                 secondsToEndtime / 60 / 60 / 24
-            } days`,
+            } days or ${secondsToEndtime} seconds`,
         )
-        console.log(`Max lock duration (minus 8 hours) is ${maxLock} which is in ${maxLock / 60 / 60 / 24} days`)
+        console.log(`Max lock duration is ${maxLock} which is in ${maxLock / 60 / 60 / 24} days`)
 
         console.log(`-----------------------------`)
         console.log(`ValidatorId: ${validator.validatorId}`)
