@@ -3,11 +3,11 @@ import { upgrades, ethers } from 'hardhat'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers'
 import FTMStakingAbi from '../artifacts/contracts/FTMStaking.sol/FTMStaking.json'
 import ValidatorPickerAbi from '../artifacts/contracts/ValidatorPicker.sol/ValidatorPicker.json'
-import FTMStakingAbiHf1 from '../artifacts/contracts/FTMStakingV1_HF1.sol/FTMStaking.json'
 import VaultAbi from '../artifacts/contracts/Vault.sol/Vault.json'
 import { formatEther, parseEther } from 'ethers/lib/utils'
 import { BigNumber, Contract } from 'ethers'
-import { ADDRESS_ZERO, advanceBlock, advanceTime, advanceTimeAndBlock } from './utils'
+import { ADDRESS_ZERO, advanceTimeAndBlock } from './utils'
+import moment from 'moment'
 
 const FTM_STAKING_PROXY = '0xB458BfC855ab504a8a327720FcEF98886065529b'
 const TREASURY_ADDRESS = '0xa1E849B1d6c2Fd31c63EEf7822e9E0632411ada7'
@@ -187,6 +187,85 @@ describe('Test ftm staking contract', function () {
         expect(ftmBalanceAfter).to.be.gt(withdrawalRequest.poolAmount)
     })
 
+    it('undelegate from free pool and withdraw as safe account', async () => {
+        const ftmStaking = await ethers.getContractAt(FTMStakingAbi.abi, FTM_STAKING_PROXY)
+        const sftmx = await ethers.getContractAt('ERC20', SFTMX)
+
+        const SAFE_ACCOUNT = await ethers.getImpersonatedSigner('0xF5e2c62B7eEcE06957850e25C2cbA336D15dC318')
+        const sendSftmxTxn = await sftmx.connect(owner).transfer(SAFE_ACCOUNT.address, parseEther('1000'))
+        await sendSftmxTxn.wait()
+
+        const sftmxBalanceOfOwnerToUndelegate = await sftmx.balanceOf(SAFE_ACCOUNT.address)
+        console.log(`SAFE has ${formatEther(sftmxBalanceOfOwnerToUndelegate)} sftmx`)
+
+        const wrId = moment().unix()
+
+        const poolBalanceBefore = await ftmStaking.getPoolBalance()
+        const rateBefore = await ftmStaking.getExchangeRate()
+
+        console.log('poolBalance', formatEther(poolBalanceBefore))
+        const undelegateTxn = await ftmStaking.connect(SAFE_ACCOUNT).undelegate(wrId, parseEther('1000'), 0, {
+            gasPrice: '0x0',
+        })
+        await undelegateTxn.wait()
+
+        const poolBalanceAfter = await ftmStaking.getPoolBalance()
+        expect(poolBalanceAfter).to.be.lt(poolBalanceBefore)
+
+        const rateAfter = await ftmStaking.getExchangeRate()
+        console.log('rate diff', formatEther(rateAfter.sub(rateBefore)))
+        // expect(rateAfter).to.be.eq(rateBefore)
+
+        const withdrawalRequest = await ftmStaking.allWithdrawalRequests(wrId)
+        console.log('poolAmount', formatEther(withdrawalRequest.poolAmount))
+        console.log('undelegateAmount', formatEther(withdrawalRequest.undelegateAmount))
+        console.log('penalty', formatEther(withdrawalRequest.penalty))
+        expect(withdrawalRequest.undelegateAmount).to.be.eq(0)
+        expect(withdrawalRequest.poolAmount).to.be.gt(0)
+        expect(withdrawalRequest.penalty).to.be.eq(0)
+
+        // advance 7 days
+        await advanceTimeAndBlock(60 * 60 * 24 * 8)
+
+        const ftmBalanceBefore = await SAFE_ACCOUNT.getBalance()
+        const withdrawTxn = await ftmStaking.connect(SAFE_ACCOUNT).withdraw(wrId, 0, {
+            gasPrice: '0x0',
+        })
+        await withdrawTxn.wait()
+        const ftmBalanceAfter = await SAFE_ACCOUNT.getBalance()
+
+        console.log('ftm diff', formatEther(ftmBalanceAfter.sub(ftmBalanceBefore)))
+        expect(ftmBalanceAfter).to.be.eq(ftmBalanceBefore.add(withdrawalRequest.poolAmount))
+        expect(ftmBalanceAfter).to.be.gt(withdrawalRequest.poolAmount)
+    })
+
+    it('withdrawing with safe account', async () => {
+        const ftmStaking = await ethers.getContractAt(FTMStakingAbi.abi, FTM_STAKING_PROXY)
+        const sftmx = await ethers.getContractAt('ERC20', SFTMX)
+
+        const SAFE_ACCOUNT = await ethers.getImpersonatedSigner('0xF5e2c62B7eEcE06957850e25C2cbA336D15dC318')
+        const wrId = '1724982644715'
+
+        const withdrawalRequest = await ftmStaking.allWithdrawalRequests(wrId)
+        console.log('poolAmount', formatEther(withdrawalRequest.poolAmount))
+        console.log('undelegateAmount', formatEther(withdrawalRequest.undelegateAmount))
+        console.log('penalty', formatEther(withdrawalRequest.penalty))
+        expect(withdrawalRequest.undelegateAmount).to.be.eq(0)
+        expect(withdrawalRequest.poolAmount).to.be.gt(0)
+        expect(withdrawalRequest.penalty).to.be.eq(0)
+
+        const ftmBalanceBefore = await SAFE_ACCOUNT.getBalance()
+        const withdrawTxn = await ftmStaking.connect(SAFE_ACCOUNT).withdraw(wrId, 0, {
+            gasPrice: '0x0',
+        })
+        await withdrawTxn.wait()
+        const ftmBalanceAfter = await SAFE_ACCOUNT.getBalance()
+
+        console.log('ftm diff', formatEther(ftmBalanceAfter.sub(ftmBalanceBefore)))
+        expect(ftmBalanceAfter).to.be.eq(ftmBalanceBefore.add(withdrawalRequest.poolAmount))
+        expect(ftmBalanceAfter).to.be.gte(withdrawalRequest.poolAmount)
+    })
+
     it('deposit', async () => {
         const ftmStaking = await ethers.getContractAt(FTMStakingAbi.abi, FTM_STAKING_PROXY)
     })
@@ -254,6 +333,8 @@ describe('Test ftm staking contract', function () {
     it('withdraw with penalty', async () => {
         const ftmStaking = await ethers.getContractAt(FTMStakingAbi.abi, FTM_STAKING_PROXY)
     })
+
+    it('pause penalty for withdrawals', async () => {})
 
     it('withdraw most funds', async () => {
         const sftmx = await ethers.getContractAt('ERC20', SFTMX)
