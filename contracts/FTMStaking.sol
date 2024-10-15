@@ -195,14 +195,14 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         for (uint256 i = 0; i < vaultCount; i = _uncheckedInc(i)) {
             address payable vault = _allVaults[i];
             if (vault != address(0)) {
-                total += Vault(vault).currentStakeValue();
+                total += Vault(vault).currentStakeValue(protocolFeeBIPS);
             }
         }
 
         uint256 maturedCount = _maturedVaults.length;
         for (uint256 i = 0; i < maturedCount; i = _uncheckedInc(i)) {
             address payable vault = _maturedVaults[i];
-            total += Vault(vault).currentStakeValue();
+            total += Vault(vault).currentStakeValue(protocolFeeBIPS);
         }
 
         return total;
