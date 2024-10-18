@@ -60,8 +60,8 @@ async function main() {
 
     const validatorsToDelegate = [
         {
-            validatorId: 168,
-            amount: 450000,
+            validatorId: 67,
+            amount: 500000,
             duration: 0,
         },
         // {

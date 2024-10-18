@@ -96,12 +96,6 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     bool public maintenancePaused;
 
     /**
-     * Enable/Disable withdrawal penalties for migration to Sonic. False by default.
-     */
-
-    bool public penaltyPaused;
-
-    /**
      * The index of the next vault to be created
      */
     uint256 public currentVaultPtr;
@@ -133,7 +127,6 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     event LogUndelegatePausedUpdated(address indexed owner, bool newValue);
     event LogWithdrawPausedUpdated(address indexed owner, bool newValue);
     event LogMaintenancePausedUpdated(address indexed owner, bool newValue);
-    event LogPenaltyPausedUpdated(address indexed owner, bool newValue);
     event LogDepositLimitUpdated(address indexed owner, uint256 low, uint256 high);
 
     event LogVaultOwnerUpdated(address indexed owner, address vault, address newOwner);
@@ -273,7 +266,7 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
                 totalStake += SFC.getStake(vault, toValidatorID);
                 if (SFC.isLockedUp(vault, toValidatorID)) {
                     uint256 vaultLockedAmount = Vault(vault).getLockedStake();
-                    totalPenalty += _getUnlockPenalty(SFC, vault, toValidatorID, vaultLockedAmount, vaultLockedAmount);
+                    totalPenalty += SFCPenalty.getUnlockPenalty(SFC, vault, toValidatorID, vaultLockedAmount, vaultLockedAmount);
                 }
             }
         }
@@ -462,16 +455,6 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         protocolFeeBIPS = newFeeBIPS;
     }
 
-    /**
-     * @notice Enable/disable withdrawal penalty (onlyOwner)
-     * @param desiredValue the desired value of the switch
-     */
-    function setPenaltyPaused(bool desiredValue) external onlyOwner {
-        require(penaltyPaused != desiredValue, "ERR_ALREADY_DESIRED_VALUE");
-        penaltyPaused = desiredValue;
-        emit LogPenaltyPausedUpdated(msg.sender, desiredValue);
-    }
-
     /**********************
      * End User Functions *
      **********************/
@@ -568,8 +551,7 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         require(totalAmount > 0, "ERR_FULLY_SLASHED");
 
         // do transfer after marking as withdrawn to protect against re-entrancy
-        (bool withdrawnToUser, ) = user.call{value: totalAmount}("");
-        require(withdrawnToUser, "Failed to withdraw FTM to user");
+        payable(user).transfer(totalAmount);
 
         emit LogWithdrawn(user, wrID, totalAmount, bitmaskToSkip);
     }
@@ -795,29 +777,16 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     function _getAmountsAfterPenalty(address payable vault, uint256 amount) internal view returns (uint256, uint256, uint256) {
         uint256 toValidatorID = Vault(vault).toValidatorID();
         uint256 vaultLockedAmount = Vault(vault).getLockedStake();
-        uint256 amountUndelegatable = vaultLockedAmount - _getUnlockPenalty(SFC, vault, toValidatorID, vaultLockedAmount, vaultLockedAmount);
+        uint256 amountUndelegatable = vaultLockedAmount -
+            SFCPenalty.getUnlockPenalty(SFC, vault, toValidatorID, vaultLockedAmount, vaultLockedAmount);
 
         if (amountUndelegatable > amount) {
             // amount undelegatable is more than amount needed, so we do a partial unlock
             uint256 estimatedToUnlock = (amount * vaultLockedAmount) / amountUndelegatable;
-            uint256 estimatedPenalty = _getUnlockPenalty(SFC, vault, toValidatorID, estimatedToUnlock, vaultLockedAmount);
+            uint256 estimatedPenalty = SFCPenalty.getUnlockPenalty(SFC, vault, toValidatorID, estimatedToUnlock, vaultLockedAmount);
             return (estimatedToUnlock, estimatedToUnlock - estimatedPenalty, amount);
         }
         return (vaultLockedAmount, amountUndelegatable, amountUndelegatable);
-    }
-
-    function _getUnlockPenalty(
-        ISFC sfcContract,
-        address payable vault,
-        uint256 toValidatorID,
-        uint256 unlockAmount,
-        uint256 totalAmount
-    ) internal view returns (uint256) {
-        if (penaltyPaused) {
-            return 0;
-        } else {
-            return SFCPenalty.getUnlockPenalty(sfcContract, vault, toValidatorID, unlockAmount, totalAmount);
-        }
     }
 
     /**

@@ -114,6 +114,12 @@ describe('Upgrade staking contract', function () {
     let treasurySigner: SignerWithAddress
     let newImplementation: Contract
 
+    before(async function () {
+        const signers = await ethers.getSigners()
+        owner = signers[0]
+        treasurySigner = await ethers.getImpersonatedSigner(TREASURY_ADDRESS)
+    })
+
     it('test forking', async () => {
         const staking = await ethers.getContractAt(FTMStakingAbi.abi, FTM_STAKING_PROXY)
 
