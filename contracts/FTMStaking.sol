@@ -568,7 +568,7 @@ contract FTMStaking is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         require(totalAmount > 0, "ERR_FULLY_SLASHED");
 
         // do transfer after marking as withdrawn to protect against re-entrancy
-        (bool withdrawnToUser, bytes memory dataUserSent) = user.call{value: totalAmount}("");
+        (bool withdrawnToUser, ) = user.call{value: totalAmount}("");
         require(withdrawnToUser, "Failed to withdraw FTM to user");
 
         emit LogWithdrawn(user, wrID, totalAmount, bitmaskToSkip);
